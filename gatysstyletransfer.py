@@ -127,7 +127,6 @@ for param in vgg.parameters():
 if torch.cuda.is_available():
     vgg.cuda()
 
-
 # load images, ordered as [style_image, content_image]
 image_names = ['MLK.jpg', 'sreac.jpg', 'towerhall.jpg', 'cityhall.jpg', 'Crystal.jpeg', 'Evening.jpeg', 'Buildings.jpg',
                'Trees.jpeg', 'Aditya.jpg', 'Pradeep.jpg']
@@ -146,73 +145,75 @@ style_image, content_image = imgs_torch
 
 opt_img = Variable(content_image.data.clone(), requires_grad=True)
 
-
 # display images
 i = 0
 fig, axes = plt.subplots(1, 2, figsize=(15, 15))
 for img in imgs:
     axes[i].imshow(img)
-
     if i == 0:
         axes[i].set_title('Disney Logo')
-
     else:
         axes[i].set_title('MLK Building')
     i = i + 1
 
-"""Now, we do experimentation by choosing different layers for Style and Content.\
-Firstly we choose <b>'r11' and 'r21'</b> for style and <b>'r42'</b> for content.
+
+def train(style_layers, content_layers, style_weights, content_weights):
+    loss_layers = style_layers + content_layers
+    loss_fns = [GramMSELoss()] * len(style_layers) + [nn.MSELoss()] * len(content_layers)
+    if torch.cuda.is_available():
+        loss_fns = [loss_fn.cuda() for loss_fn in loss_fns]
+
+    weights = style_weights + content_weights
+
+    # compute optimization targets
+    style_targets = [GramMatrix()(A).detach() for A in vgg(style_image, style_layers)]
+    content_targets = [A.detach() for A in vgg(content_image, content_layers)]
+    targets = style_targets + content_targets
+
+    # run style transfer
+    max_iter = 500
+    show_iter = 50
+    optimizer = optim.LBFGS([opt_img])
+    n_iter = [0]
+
+    while n_iter[0] <= max_iter:
+
+        def closure():
+            optimizer.zero_grad()
+            out = vgg(opt_img, loss_layers)
+            layer_losses = [weights[a] * loss_fns[a](A, targets[a]) for a, A in enumerate(out)]
+            loss = sum(layer_losses)
+            loss.backward()
+            n_iter[0] += 1
+            # print loss
+            if n_iter[0] % show_iter == (show_iter - 1):
+                print('Iteration: %d, loss: %f' % (n_iter[0] + 1, loss.item()))
+            # print([loss_layers[li] + ': ' +  str(l.data[0]) for li,l in enumerate(layer_losses)]) #loss of each layer
+            return loss
+
+        optimizer.step(closure)
+
+
+""" Now, we do experimentation by choosing different layers for Style and Content.\
+First, we choose 'r11' and 'r21' for style and 'r42' for content.
 """
 
 style_layers = ['r11', 'r21']
-
 content_layers = ['r42']
-loss_layers = style_layers + content_layers
-loss_functions = [GramMSELoss()] * len(style_layers) + [nn.MSELoss()] * len(content_layers)
-if torch.cuda.is_available():
-    loss_functions = [loss_function.cuda() for loss_function in loss_functions]
-
-# these are good weights settings:
 style_weights = [1e3 / n ** 2 for n in [64, 128]]
 content_weights = [1e0]
-weights = style_weights + content_weights
 
-# compute optimization targets
-style_targets = [GramMatrix()(A).detach() for A in vgg(style_image, style_layers)]
-content_targets = [A.detach() for A in vgg(content_image, content_layers)]
-targets = style_targets + content_targets
-
-# run style transfer
-max_iter = 500
-show_iter = 50
-optimizer = optim.LBFGS([opt_img]);
-n_iter = [0]
-
-while n_iter[0] <= max_iter:
-
-    def closure():
-        optimizer.zero_grad()
-        out = vgg(opt_img, loss_layers)
-        layer_losses = [weights[a] * loss_functions[a](A, targets[a]) for a, A in enumerate(out)]
-        loss = sum(layer_losses)
-        loss.backward()
-        n_iter[0] += 1
-        # print loss
-        if n_iter[0] % show_iter == (show_iter - 1):
-            print('Iteration: %d, loss: %f' % (n_iter[0] + 1, loss.item()))
-        #             print([loss_layers[li] + ': ' +  str(l.data[0]) for li,l in enumerate(layer_losses)]) #loss of each layer
-        return loss
-
-
-    optimizer.step(closure)
+train(style_layers, content_layers, style_weights, content_weights)
 
 # display result
 out_img1 = postp(opt_img.data[0].cpu().squeeze())
 plt.imshow(out_img1)
 plt.gcf().set_size_inches(10, 10)
 
-out_image_name = 'Output_Images/' + 'diney_' + content_image_name
+# saving the result
+out_image_name = 'Output_Images/' + style_image_name.split('.')[0] + "_" + content_image_name
 out_img1.save(out_image_name)
+
 
 # from PIL import Image
 # im = Image.open('/content/style.gif')
@@ -303,121 +304,77 @@ out_img1.save(out_image_name)
 # out_image_name = '/content/Output_Image/'+'Vangogh_'+content_image_name
 # out_img1.save(out_image_name)
 
+def plot_images(axs, i, j, imgs, imgs_spongebob, imgs_monalisa, imgs_studio_ghibli, imgs_disney):
+    axs[i, 0].imshow(imgs[j].resize(imgs_monalisa[j].size))
+    axs[i, 1].imshow(imgs_monalisa[j])
+    axs[i, 2].imshow(imgs_disney[j])
+    axs[i, 3].imshow(imgs_studio_ghibli[j])
+    axs[i, 4].imshow(imgs_spongebob[j])
+    axs[i, 0].set_title('Input image')
+    axs[i, 1].set_title('Monalisa')
+    axs[i, 2].set_title('Disney')
+    axs[i, 3].set_title('Studio Ghibli')
+    axs[i, 4].set_title('Spongebob Squarepants')
+
+# Plotting the results
 
 image_names = ['MLK.jpg', 'sreac.jpg', 'towerhall.jpg', 'cityhall.jpg', 'Crystal.jpeg', 'Evening.jpeg', 'Buildings.jpg',
                'Trees.jpeg', 'Aditya.jpg', 'Pradeep.jpg']
 
-
 image_dir = "Output_Images/"
-
 imgs = [Image.open('Images/' + name) for i, name in enumerate(image_names)]
-
 imgs_spongebob = [Image.open(image_dir + "spongebob_" + name) for i, name in enumerate(image_names)]
 imgs_monalisa = [Image.open(image_dir + 'monalisa_' + name) for i, name in enumerate(image_names)]
 imgs_studio_ghibli = [Image.open(image_dir + 'studio_ghibli_' + name) for i, name in enumerate(image_names)]
 imgs_disney = [Image.open(image_dir + 'disney_' + name) for i, name in enumerate(image_names)]
 
 fig, axs = plt.subplots(4, 5, figsize=(18, 11), sharex=True, sharey=True)
-
 for i in range(4):
     j = i
-    axs[i, 0].imshow(imgs[j].resize(imgs_monalisa[j].size))
-    axs[i, 1].imshow(imgs_monalisa[j])
-    axs[i, 2].imshow(imgs_disney[j])
-    axs[i, 3].imshow(imgs_studio_ghibli[j])
-    axs[i, 4].imshow(imgs_spongebob[j])
-    axs[i, 0].set_title('Input image')
-    axs[i, 1].set_title('Monalisa')
-    axs[i, 2].set_title('Disney')
-    axs[i, 3].set_title('Studio Ghibli')
-    axs[i, 4].set_title('Spongebob Squarepants')
+    plot_images(axs, i, j, imgs, imgs_spongebob, imgs_monalisa, imgs_studio_ghibli, imgs_disney)
 
 fig, axs = plt.subplots(4, 5, figsize=(18, 11), sharex=True, sharey=True)
-
 for i in range(4):
     j = i + 4
-    axs[i, 0].imshow(imgs[j].resize(imgs_monalisa[j].size))
-    axs[i, 1].imshow(imgs_monalisa[j])
-    axs[i, 2].imshow(imgs_disney[j])
-    axs[i, 3].imshow(imgs_studio_ghibli[j])
-    axs[i, 4].imshow(imgs_spongebob[j])
-    axs[i, 0].set_title('Input image')
-    axs[i, 1].set_title('Monalisa')
-    axs[i, 2].set_title('Disney')
-    axs[i, 3].set_title('Studio Ghibli')
-    axs[i, 4].set_title('Spongebob Squarepants')
+    plot_images(axs, i, j, imgs, imgs_spongebob, imgs_monalisa, imgs_studio_ghibli, imgs_disney)
 
 fig, axs = plt.subplots(2, 5, figsize=(15, 6), sharex=True, sharey=True)
-
 for i in range(2):
     j = i + 8
-    axs[i, 0].imshow(imgs[j].resize(imgs_monalisa[j].size))
-    axs[i, 1].imshow(imgs_monalisa[j])
-    axs[i, 2].imshow(imgs_disney[j])
-    axs[i, 3].imshow(imgs_studio_ghibli[j])
-    axs[i, 4].imshow(imgs_spongebob[j])
-    axs[i, 0].set_title('Input image')
-    axs[i, 1].set_title('Monalisa')
-    axs[i, 2].set_title('Disney')
-    axs[i, 3].set_title('Studio Ghibli')
-    axs[i, 4].set_title('Spongebob Squarepants')
+    plot_images(axs, i, j, imgs, imgs_spongebob, imgs_monalisa, imgs_studio_ghibli, imgs_disney)
 
+
+""" Now we run the second experiment. We use 3 layers r11, r21, r31 for extracting the style 
+ and r42 and r32  for extracting the content."""
+
+style_layers = ['r11','r21','r31']
+content_layers = ['r42','r32']
+style_weights = [1e3/n**2 for n in [64,128,256]]
+content_weights = [1e0,1e0]
+train(style_layers, content_layers, style_weights, content_weights)
 
 # display result
 out_img2 = postp(opt_img.data[0].cpu().squeeze())
 plt.imshow(out_img2)
 plt.gcf().set_size_inches(10, 10)
 
-"""Let's now use 5 layers r11, r21, r31, r41 and r51 for extracting the style and r42, r32 and r22 for extracting the content."""
+""" Now we run the third experiment. Let's now use 5 layers r11, r21, r31, r41 and r51 for extracting the style 
+and r42, r32 and r22 for extracting the content."""
 
 style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
-
 content_layers = ['r42', 'r32', 'r22']
-loss_layers = style_layers + content_layers
-loss_fns = [GramMSELoss()] * len(style_layers) + [nn.MSELoss()] * len(content_layers)
-if torch.cuda.is_available():
-    loss_fns = [loss_fn.cuda() for loss_fn in loss_fns]
-
-# these are good weights settings:
 style_weights = [1e3 / n ** 2 for n in [64, 128, 256, 512, 512]]
 content_weights = [1e0, 1e0, 1e0]
-weights = style_weights + content_weights
-
-# compute optimization targets
-style_targets = [GramMatrix()(A).detach() for A in vgg(style_image, style_layers)]
-content_targets = [A.detach() for A in vgg(content_image, content_layers)]
-targets = style_targets + content_targets
-
-# run style transfer
-max_iter = 500
-show_iter = 50
-optimizer = optim.LBFGS([opt_img]);
-n_iter = [0]
-
-while n_iter[0] <= max_iter:
-
-    def closure():
-        optimizer.zero_grad()
-        out = vgg(opt_img, loss_layers)
-        layer_losses = [weights[a] * loss_fns[a](A, targets[a]) for a, A in enumerate(out)]
-        loss = sum(layer_losses)
-        loss.backward()
-        n_iter[0] += 1
-        # print loss
-        if n_iter[0] % show_iter == (show_iter - 1):
-            print('Iteration: %d, loss: %f' % (n_iter[0] + 1, loss.item()))
-        return loss
-
-
-    optimizer.step(closure)
+train(style_layers, content_layers, style_weights, content_weights)
 
 out_img3 = postp(opt_img.data[0].cpu().squeeze())
-
 plt.imshow(out_img3)
 plt.gcf().set_size_inches(10, 10)
 
+
 """Lets compare the 3 results we obtained"""
 
+# make this a function
 fig, ax = plt.subplots(2, 2, figsize=(15, 10))
 
 ax[0, 0].imshow(imgs[0])
