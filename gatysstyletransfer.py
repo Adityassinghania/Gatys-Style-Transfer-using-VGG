@@ -1,3 +1,6 @@
+import os
+import sys
+
 import matplotlib.pyplot as plt
 import torch
 from PIL import Image
@@ -7,14 +10,8 @@ from torch.autograd import Variable
 from torch.nn import functional as F
 from torchvision import transforms
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-print(device)
-
-image_path = 'Images/'
-
 # constants
-content_image_name = ""
-style_image_name = "disney.jpg"
+
 
 
 # vgg definition that conveniently let's you grab the outputs from any layer
@@ -93,22 +90,23 @@ class GramMSELoss(nn.Module):
         return (out)
 
 
-# pre and post processing for images
-image_size = 512
-prep = transforms.Compose([transforms.Scale(image_size),
-                           transforms.ToTensor(),
-                           transforms.Lambda(lambda x: x[torch.LongTensor([2, 1, 0])]),  # turn to BGR
-                           transforms.Normalize(mean=[0.40760392, 0.45795686, 0.48501961],  # subtract imagenet mean
-                                                std=[1, 1, 1]),
-                           transforms.Lambda(lambda x: x.mul_(255)),
-                           ])
-postpa = transforms.Compose([transforms.Lambda(lambda x: x.mul_(1. / 255)),
-                             transforms.Normalize(mean=[-0.40760392, -0.45795686, -0.48501961],  # add imagenet mean
-                                                  std=[1, 1, 1]),
-                             transforms.Lambda(lambda x: x[torch.LongTensor([2, 1, 0])]),  # turn to RGB
-                             ])
-postpb = transforms.Compose([transforms.ToPILImage()])
-
+def process_images():
+    global prep, postpa, postpb
+    # pre and post processing for images
+    image_size = 512
+    prep = transforms.Compose([transforms.Scale(image_size),
+                               transforms.ToTensor(),
+                               transforms.Lambda(lambda x: x[torch.LongTensor([2, 1, 0])]),  # turn to BGR
+                               transforms.Normalize(mean=[0.40760392, 0.45795686, 0.48501961],  # subtract imagenet mean
+                                                    std=[1, 1, 1]),
+                               transforms.Lambda(lambda x: x.mul_(255)),
+                               ])
+    postpa = transforms.Compose([transforms.Lambda(lambda x: x.mul_(1. / 255)),
+                                 transforms.Normalize(mean=[-0.40760392, -0.45795686, -0.48501961],  # add imagenet mean
+                                                      std=[1, 1, 1]),
+                                 transforms.Lambda(lambda x: x[torch.LongTensor([2, 1, 0])]),  # turn to RGB
+                                 ])
+    postpb = transforms.Compose([transforms.ToPILImage()])
 
 def postp(tensor):  # to clip results in the range [0,1]
     t = postpa(tensor)
@@ -117,47 +115,47 @@ def postp(tensor):  # to clip results in the range [0,1]
     img = postpb(t)
     return img
 
-
 """Loading weights to the above self defined VGG architecture"""
 
-vgg = VGG()
-vgg.load_state_dict(torch.load('vgg_conv.pth'))
-for param in vgg.parameters():
-    param.requires_grad = False
-if torch.cuda.is_available():
-    vgg.cuda()
+def load_weights():
+    vgg = VGG()
+    vgg.load_state_dict(torch.load('vgg_conv.pth'))
+    for param in vgg.parameters():
+        param.requires_grad = False
+    if torch.cuda.is_available():
+        vgg.cuda()
+    return vgg
 
-# load images, ordered as [style_image, content_image]
-image_names = ['MLK.jpg', 'sreac.jpg', 'towerhall.jpg', 'cityhall.jpg', 'Crystal.jpeg', 'Evening.jpeg', 'Buildings.jpg',
-               'Trees.jpeg', 'Aditya.jpg', 'Pradeep.jpg']
+"""load images, ordered as [style_image, content_image]"""
 
-content_image_name = image_names[0]
-
-img_dirs = [image_path, image_path]
-img_names = [style_image_name, content_image_name]
-imgs = [Image.open(img_dirs[i] + name) for i, name in enumerate(img_names)]
-imgs_torch = [prep(img) for img in imgs]
-if torch.cuda.is_available():
-    imgs_torch = [Variable(img.unsqueeze(0).cuda()) for img in imgs_torch]
-else:
-    imgs_torch = [Variable(img.unsqueeze(0)) for img in imgs_torch]
-style_image, content_image = imgs_torch
-
-opt_img = Variable(content_image.data.clone(), requires_grad=True)
-
-# display images
-i = 0
-fig, axes = plt.subplots(1, 2, figsize=(15, 15))
-for img in imgs:
-    axes[i].imshow(img)
-    if i == 0:
-        axes[i].set_title('Disney Logo')
+def load_images(style_image_name, content_image_name):
+    image_names = ['MLK.jpg', 'sreac.jpg', 'towerhall.jpg', 'cityhall.jpg', 'Crystal.jpeg', 'Evening.jpeg',
+                   'Buildings.jpg','Trees.jpeg', 'Aditya.jpg', 'Pradeep.jpg']
+    #content_image_name = image_names[0]
+    img_dirs = [image_path, image_path]
+    img_names = [style_image_name, content_image_name]
+    imgs = [Image.open(img_dirs[i] + name) for i, name in enumerate(img_names)]
+    imgs_torch = [prep(img) for img in imgs]
+    if torch.cuda.is_available():
+        imgs_torch = [Variable(img.unsqueeze(0).cuda()) for img in imgs_torch]
     else:
-        axes[i].set_title('MLK Building')
-    i = i + 1
+        imgs_torch = [Variable(img.unsqueeze(0)) for img in imgs_torch]
+    style_image, content_image = imgs_torch
+    opt_img = Variable(content_image.data.clone(), requires_grad=True)
+    # display images
+    i = 0
+    fig, axes = plt.subplots(1, 2, figsize=(15, 15))
+    for img in imgs:
+        axes[i].imshow(img)
+        if i == 0:
+            axes[i].set_title('Disney Logo')
+        else:
+            axes[i].set_title('MLK Building')
+        i = i + 1
+    return opt_img, style_image, content_image
 
 
-def train(style_layers, content_layers, style_weights, content_weights):
+def train(style_layers, content_layers, style_weights, content_weights, vgg, style_image, content_image):
     loss_layers = style_layers + content_layers
     loss_fns = [GramMSELoss()] * len(style_layers) + [nn.MSELoss()] * len(content_layers)
     if torch.cuda.is_available():
@@ -171,7 +169,7 @@ def train(style_layers, content_layers, style_weights, content_weights):
     targets = style_targets + content_targets
 
     # run style transfer
-    max_iter = 500
+    max_iter = 100
     show_iter = 50
     optimizer = optim.LBFGS([opt_img])
     n_iter = [0]
@@ -197,22 +195,18 @@ def train(style_layers, content_layers, style_weights, content_weights):
 """ Now, we do experimentation by choosing different layers for Style and Content.\
 First, we choose 'r11' and 'r21' for style and 'r42' for content.
 """
-
-style_layers = ['r11', 'r21']
-content_layers = ['r42']
-style_weights = [1e3 / n ** 2 for n in [64, 128]]
-content_weights = [1e0]
-
-train(style_layers, content_layers, style_weights, content_weights)
-
-# display result
-out_img1 = postp(opt_img.data[0].cpu().squeeze())
-plt.imshow(out_img1)
-plt.gcf().set_size_inches(10, 10)
-
-# saving the result
-out_image_name = 'Output_Images/' + style_image_name.split('.')[0] + "_" + content_image_name
-out_img1.save(out_image_name)
+def conduct_first_experiment(opt_img, vgg, style_image, content_image):
+    style_layers = ['r11', 'r21']
+    content_layers = ['r42']
+    style_weights = [1e3 / n ** 2 for n in [64, 128]]
+    content_weights = [1e0]
+    train(style_layers, content_layers, style_weights, content_weights, vgg, style_image, content_image)
+    # display result
+    out_img1 = postp(opt_img.data[0].cpu().squeeze())
+    plt.imshow(out_img1)
+    plt.gcf().set_size_inches(10, 10)
+    plt.show()
+    return out_img1
 
 
 # from PIL import Image
@@ -316,75 +310,119 @@ def plot_images(axs, i, j, imgs, imgs_spongebob, imgs_monalisa, imgs_studio_ghib
     axs[i, 3].set_title('Studio Ghibli')
     axs[i, 4].set_title('Spongebob Squarepants')
 
-# Plotting the results
 
-image_names = ['MLK.jpg', 'sreac.jpg', 'towerhall.jpg', 'cityhall.jpg', 'Crystal.jpeg', 'Evening.jpeg', 'Buildings.jpg',
-               'Trees.jpeg', 'Aditya.jpg', 'Pradeep.jpg']
-
-image_dir = "Output_Images/"
-imgs = [Image.open('Images/' + name) for i, name in enumerate(image_names)]
-imgs_spongebob = [Image.open(image_dir + "spongebob_" + name) for i, name in enumerate(image_names)]
-imgs_monalisa = [Image.open(image_dir + 'monalisa_' + name) for i, name in enumerate(image_names)]
-imgs_studio_ghibli = [Image.open(image_dir + 'studio_ghibli_' + name) for i, name in enumerate(image_names)]
-imgs_disney = [Image.open(image_dir + 'disney_' + name) for i, name in enumerate(image_names)]
-
-fig, axs = plt.subplots(4, 5, figsize=(18, 11), sharex=True, sharey=True)
-for i in range(4):
-    j = i
-    plot_images(axs, i, j, imgs, imgs_spongebob, imgs_monalisa, imgs_studio_ghibli, imgs_disney)
-
-fig, axs = plt.subplots(4, 5, figsize=(18, 11), sharex=True, sharey=True)
-for i in range(4):
-    j = i + 4
-    plot_images(axs, i, j, imgs, imgs_spongebob, imgs_monalisa, imgs_studio_ghibli, imgs_disney)
-
-fig, axs = plt.subplots(2, 5, figsize=(15, 6), sharex=True, sharey=True)
-for i in range(2):
-    j = i + 8
-    plot_images(axs, i, j, imgs, imgs_spongebob, imgs_monalisa, imgs_studio_ghibli, imgs_disney)
+"""Plotting the results"""
+def plot_results():
+    image_names = ['MLK.jpg', 'sreac.jpg', 'towerhall.jpg', 'cityhall.jpg', 'Crystal.jpeg', 'Evening.jpeg',
+                   'Buildings.jpg',
+                   'Trees.jpeg', 'Aditya.jpg', 'Pradeep.jpg']
+    image_dir = "Output_Images/"
+    imgs = [Image.open('Images/' + name) for i, name in enumerate(image_names)]
+    imgs_spongebob = [Image.open(image_dir + "spongebob_" + name) for i, name in enumerate(image_names)]
+    imgs_monalisa = [Image.open(image_dir + 'monalisa_' + name) for i, name in enumerate(image_names)]
+    imgs_studio_ghibli = [Image.open(image_dir + 'studio_ghibli_' + name) for i, name in enumerate(image_names)]
+    imgs_disney = [Image.open(image_dir + 'disney_' + name) for i, name in enumerate(image_names)]
+    fig, axs = plt.subplots(4, 5, figsize=(18, 11), sharex=True, sharey=True)
+    for i in range(4):
+        j = i
+        plot_images(axs, i, j, imgs, imgs_spongebob, imgs_monalisa, imgs_studio_ghibli, imgs_disney)
+    fig, axs = plt.subplots(4, 5, figsize=(18, 11), sharex=True, sharey=True)
+    for i in range(4):
+        j = i + 4
+        plot_images(axs, i, j, imgs, imgs_spongebob, imgs_monalisa, imgs_studio_ghibli, imgs_disney)
+    fig, axs = plt.subplots(2, 5, figsize=(15, 6), sharex=True, sharey=True)
+    for i in range(2):
+        j = i + 8
+        plot_images(axs, i, j, imgs, imgs_spongebob, imgs_monalisa, imgs_studio_ghibli, imgs_disney)
+    return imgs
 
 
 """ Now we run the second experiment. We use 3 layers r11, r21, r31 for extracting the style 
  and r42 and r32  for extracting the content."""
 
-style_layers = ['r11','r21','r31']
-content_layers = ['r42','r32']
-style_weights = [1e3/n**2 for n in [64,128,256]]
-content_weights = [1e0,1e0]
-train(style_layers, content_layers, style_weights, content_weights)
 
-# display result
-out_img2 = postp(opt_img.data[0].cpu().squeeze())
-plt.imshow(out_img2)
-plt.gcf().set_size_inches(10, 10)
+def conduct_second_experiment(opt_img, vgg, style_image, content_image):
+    style_layers = ['r11', 'r21', 'r31']
+    content_layers = ['r42', 'r32']
+    style_weights = [1e3 / n ** 2 for n in [64, 128, 256]]
+    content_weights = [1e0, 1e0]
+    train(style_layers, content_layers, style_weights, content_weights, vgg, style_image, content_image)
+    # display result
+    out_img2 = postp(opt_img.data[0].cpu().squeeze())
+    plt.imshow(out_img2)
+    plt.gcf().set_size_inches(10, 10)
+    plt.show()
+    return out_img2
+
 
 """ Now we run the third experiment. Let's now use 5 layers r11, r21, r31, r41 and r51 for extracting the style 
 and r42, r32 and r22 for extracting the content."""
 
-style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
-content_layers = ['r42', 'r32', 'r22']
-style_weights = [1e3 / n ** 2 for n in [64, 128, 256, 512, 512]]
-content_weights = [1e0, 1e0, 1e0]
-train(style_layers, content_layers, style_weights, content_weights)
+def conduct_third_experiment(opt_img, vgg, style_image, content_image):
+    global style_layers, content_layers, style_weights, content_weights, out_img3
+    style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
+    content_layers = ['r42', 'r32', 'r22']
+    style_weights = [1e3 / n ** 2 for n in [64, 128, 256, 512, 512]]
+    content_weights = [1e0, 1e0, 1e0]
+    train(style_layers, content_layers, style_weights, content_weights, vgg, style_image, content_image)
+    out_img3 = postp(opt_img.data[0].cpu().squeeze())
+    plt.imshow(out_img3)
+    plt.gcf().set_size_inches(10, 10)
+    plt.show()
+    return out_img3
 
-out_img3 = postp(opt_img.data[0].cpu().squeeze())
-plt.imshow(out_img3)
-plt.gcf().set_size_inches(10, 10)
+
 
 
 """Lets compare the 3 results we obtained"""
 
-# make this a function
-fig, ax = plt.subplots(2, 2, figsize=(15, 10))
 
-ax[0, 0].imshow(imgs[0])
-ax[0, 0].title.set_text('Image')
+def compare_results(imgs, out_img1, out_img2, out_img3):
+    fig, ax = plt.subplots(2, 2, figsize=(15, 10))
+    ax[0, 0].imshow(imgs)
+    ax[0, 0].title.set_text('Image')
+    ax[0, 1].imshow(out_img1)
+    ax[0, 1].title.set_text('First Output')
+    ax[1, 0].imshow(out_img2)
+    ax[1, 0].title.set_text('Second Output')
+    ax[1, 1].imshow(out_img3)
+    ax[1, 1].title.set_text('Third Output')
+    plt.show()
 
-ax[0, 1].imshow(out_img1)
-ax[0, 1].title.set_text('First Output')
 
-ax[1, 0].imshow(out_img2)
-ax[1, 0].title.set_text('Second Output')
 
-ax[1, 1].imshow(out_img3)
-ax[1, 1].title.set_text('Third Output')
+
+if __name__ == '__main__':
+    # if len(sys.argv) != 3:
+    #     print("Incorrect number of arguments")
+    #     exit(0)
+    #
+
+    # style_image_name = sys.argv[1]
+    # content_image_name = sys.argv[2]
+    #
+    #
+    # if (not os.path.exists(image_path+style_image_name) or not os.path.exists(image_path+content_image_name)):
+    #     print("File does not exist")
+    #     exit(1)
+    image_path = 'Images/'
+    content_image_name = "MLK.jpg"
+    style_image_name = "disney.jpg"
+
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(device)
+    process_images()
+    vgg = load_weights()
+    opt_img, style_image, content_image = load_images(style_image_name, content_image_name)
+
+    out_img1 = conduct_first_experiment(opt_img, vgg, style_image, content_image)
+    # saving the result
+    out_image_name = 'Output_Images/' + style_image_name.split('.')[0] + "_" + content_image_name+".jpeg"
+    out_img1.save(out_image_name)
+
+    imgs = plot_results()
+    out_img2 = conduct_second_experiment(opt_img, vgg, style_image, content_image)
+    out_img3 = conduct_third_experiment(opt_img, vgg, style_image, content_image)
+    compare_results(Image.open('Output_Images/disney_MLK.jpg.jpeg'), Image.open('Output_Images/disney_MLK.jpg.jpeg'),
+                    Image.open('Output_Images/disney_MLK.jpg.jpeg'), Image.open('Output_Images/disney_MLK.jpg.jpeg'))
+
