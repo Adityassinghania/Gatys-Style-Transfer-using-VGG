@@ -169,7 +169,7 @@ def train(style_layers, content_layers, style_weights, content_weights, vgg, sty
     targets = style_targets + content_targets
 
     # run style transfer
-    max_iter = 100
+    max_iter = 500
     show_iter = 50
     optimizer = optim.LBFGS([opt_img])
     n_iter = [0]
@@ -183,6 +183,7 @@ def train(style_layers, content_layers, style_weights, content_weights, vgg, sty
             loss = sum(layer_losses)
             loss.backward()
             n_iter[0] += 1
+            print(n_iter[0])
             # print loss
             if n_iter[0] % show_iter == (show_iter - 1):
                 print('Iteration: %d, loss: %f' % (n_iter[0] + 1, loss.item()))
@@ -202,6 +203,7 @@ def conduct_first_experiment(opt_img, vgg, style_image, content_image):
     content_weights = [1e0]
     train(style_layers, content_layers, style_weights, content_weights, vgg, style_image, content_image)
     # display result
+    print("Displaying results of first experiment")
     out_img1 = postp(opt_img.data[0].cpu().squeeze())
     plt.imshow(out_img1)
     plt.gcf().set_size_inches(10, 10)
@@ -334,6 +336,7 @@ def plot_results():
     for i in range(2):
         j = i + 8
         plot_images(axs, i, j, imgs, imgs_spongebob, imgs_monalisa, imgs_studio_ghibli, imgs_disney)
+    plt.show()
     return imgs
 
 
@@ -348,6 +351,7 @@ def conduct_second_experiment(opt_img, vgg, style_image, content_image):
     content_weights = [1e0, 1e0]
     train(style_layers, content_layers, style_weights, content_weights, vgg, style_image, content_image)
     # display result
+    print("Displaying results of second experiment")
     out_img2 = postp(opt_img.data[0].cpu().squeeze())
     plt.imshow(out_img2)
     plt.gcf().set_size_inches(10, 10)
@@ -365,6 +369,7 @@ def conduct_third_experiment(opt_img, vgg, style_image, content_image):
     style_weights = [1e3 / n ** 2 for n in [64, 128, 256, 512, 512]]
     content_weights = [1e0, 1e0, 1e0]
     train(style_layers, content_layers, style_weights, content_weights, vgg, style_image, content_image)
+    print("Displaying results of third experiment")
     out_img3 = postp(opt_img.data[0].cpu().squeeze())
     plt.imshow(out_img3)
     plt.gcf().set_size_inches(10, 10)
@@ -378,6 +383,7 @@ def conduct_third_experiment(opt_img, vgg, style_image, content_image):
 
 
 def compare_results(imgs, out_img1, out_img2, out_img3):
+    print("comparing the three outputs")
     fig, ax = plt.subplots(2, 2, figsize=(15, 10))
     ax[0, 0].imshow(imgs)
     ax[0, 0].title.set_text('Image')
@@ -393,21 +399,21 @@ def compare_results(imgs, out_img1, out_img2, out_img3):
 
 
 if __name__ == '__main__':
-    # if len(sys.argv) != 3:
-    #     print("Incorrect number of arguments")
-    #     exit(0)
-    #
+    if len(sys.argv) != 3:
+        print("Incorrect number of arguments")
+        exit(0)
 
-    # style_image_name = sys.argv[1]
-    # content_image_name = sys.argv[2]
-    #
-    #
-    # if (not os.path.exists(image_path+style_image_name) or not os.path.exists(image_path+content_image_name)):
-    #     print("File does not exist")
-    #     exit(1)
     image_path = 'Images/'
-    content_image_name = "MLK.jpg"
-    style_image_name = "disney.jpg"
+    style_image_name = sys.argv[1]
+    content_image_name = sys.argv[2]
+
+
+    if (not os.path.exists(image_path+style_image_name) or not os.path.exists(image_path+content_image_name)):
+        print("File does not exist")
+        exit(1)
+
+    # content_image_name = "MLK.jpg"
+    # style_image_name = "disney.jpg"
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(device)
@@ -415,14 +421,22 @@ if __name__ == '__main__':
     vgg = load_weights()
     opt_img, style_image, content_image = load_images(style_image_name, content_image_name)
 
+    print("conducting the first experiment")
     out_img1 = conduct_first_experiment(opt_img, vgg, style_image, content_image)
     # saving the result
-    out_image_name = 'Output_Images/' + style_image_name.split('.')[0] + "_" + content_image_name+".jpeg"
-    out_img1.save(out_image_name)
-
+    print("saving the file")
+    out_image1_name = 'Output_Images/' + style_image_name.split('.')[0] + "_" + content_image_name.split('.')[0]+"_1.jpeg"
+    out_img1.save(out_image1_name)
+    print("file saved")
+    print("Plotting results")
     imgs = plot_results()
+    print("conducting the second experiment")
     out_img2 = conduct_second_experiment(opt_img, vgg, style_image, content_image)
+    out_image2_name = 'Output_Images/' + style_image_name.split('.')[0] + "_" + content_image_name.split('.')[0] + "_2.jpeg"
+    out_img2.save(out_image2_name)
+    print("conducting the third experiment")
     out_img3 = conduct_third_experiment(opt_img, vgg, style_image, content_image)
-    compare_results(Image.open('Output_Images/disney_MLK.jpg.jpeg'), Image.open('Output_Images/disney_MLK.jpg.jpeg'),
-                    Image.open('Output_Images/disney_MLK.jpg.jpeg'), Image.open('Output_Images/disney_MLK.jpg.jpeg'))
+    out_image3_name = 'Output_Images/' + style_image_name.split('.')[0] + "_" + content_image_name.split('.')[0] + "_3.jpeg"
+    out_img3.save(out_image3_name)
+    compare_results(Image.open('Images/'+content_image_name), Image.open(out_image1_name), Image.open(out_image2_name), Image.open(out_image3_name))
 
