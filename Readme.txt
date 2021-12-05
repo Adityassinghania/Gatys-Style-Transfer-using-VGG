@@ -9,6 +9,12 @@ There are two files in this project :
 gatysstyletransfer.py and
 gatysstyletransfer_animated.py
 
+Directories - 
+Images - keep style and content images for gatys style transfer
+Output_Images - output after style transfer gets saved here in the format styleName_contentName.jpeg
+style - stores frames after splitting the style.gif file
+content- stores frames after splitting the content.gif file
+Transfer frames - stores the frames and the final gif after completion of program
 
 gatysstyletransfer.py:
 
