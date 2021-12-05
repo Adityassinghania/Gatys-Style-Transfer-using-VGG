@@ -10,8 +10,8 @@ from torch.autograd import Variable
 from torch.nn import functional as F
 from torchvision import transforms
 
-# constants
 
+# constants
 
 
 # vgg definition that conveniently let's you grab the outputs from any layer
@@ -108,6 +108,7 @@ def process_images():
                                  ])
     postpb = transforms.Compose([transforms.ToPILImage()])
 
+
 def postp(tensor):  # to clip results in the range [0,1]
     t = postpa(tensor)
     t[t > 1] = 1
@@ -115,7 +116,9 @@ def postp(tensor):  # to clip results in the range [0,1]
     img = postpb(t)
     return img
 
+
 """Loading weights to the above self defined VGG architecture"""
+
 
 def load_weights():
     vgg = VGG()
@@ -126,12 +129,14 @@ def load_weights():
         vgg.cuda()
     return vgg
 
+
 """load images, ordered as [style_image, content_image]"""
+
 
 def load_images(style_image_name, content_image_name):
     image_names = ['MLK.jpg', 'sreac.jpg', 'towerhall.jpg', 'cityhall.jpg', 'Crystal.jpeg', 'Evening.jpeg',
-                   'Buildings.jpg','Trees.jpeg', 'Aditya.jpg', 'Pradeep.jpg']
-    #content_image_name = image_names[0]
+                   'Buildings.jpg', 'Trees.jpeg', 'Aditya.jpg', 'Pradeep.jpg']
+    # content_image_name = image_names[0]
     img_dirs = [image_path, image_path]
     img_names = [style_image_name, content_image_name]
     imgs = [Image.open(img_dirs[i] + name) for i, name in enumerate(img_names)]
@@ -196,6 +201,8 @@ def train(style_layers, content_layers, style_weights, content_weights, vgg, sty
 """ Now, we do experimentation by choosing different layers for Style and Content.\
 First, we choose 'r11' and 'r21' for style and 'r42' for content.
 """
+
+
 def conduct_first_experiment(opt_img, vgg, style_image, content_image):
     style_layers = ['r11', 'r21']
     content_layers = ['r42']
@@ -211,95 +218,6 @@ def conduct_first_experiment(opt_img, vgg, style_image, content_image):
     return out_img1
 
 
-# from PIL import Image
-# im = Image.open('/content/style.gif')
-# for i in range(im.n_frames):
-#   im.seek(i)
-#   # im = im.convert('RGB')
-#   im.save("/content/Style_Frames/"+str(i)+'.png')
-# im = Image.open('/content/content.gif')
-# for i in range(im.n_frames):
-#   im.seek(i)
-#   im.save("/content/Content_Frames/"+str(i)+'.png')
-# #load images, ordered as [style_image, content_image]
-
-# def load_files(folder_name):
-#     files = []
-#     path = join(os.getcwd(), folder_name)
-#     for file in listdir(path):
-#         fPath = join(path, file)
-#         if isfile(fPath):
-#             img = Image.open(fPath)
-#             arr = (np.array(img))
-#             files.append(arr)
-#             f_name = os.path.splitext(ntpath.basename(fPath))[0]
-#             key_list = list(COLLISION_TYPE.keys())
-#             val_list = list(COLLISION_TYPE.values())
-#             position = val_list.index(f_name.split(".")[0].split("_", 1)[1])
-#             class_label.append(key_list[position])
-#     return files, class_label
-# image_names = ['Building1.jpeg','Building2.jpeg','Building3.jpeg','Building4.jpeg','Glass_Sphere.jpeg',\
-#                'Ocean_pink_sky.jpeg','Tree_Sun.jpeg','Building_river.jpeg','Amol.jpeg','Suhrid.jpeg']
-
-# content_image_name = image_names[2]
-
-# img_dirs = [image_path, image_path]
-# img_names = ['vangogh.jpg', content_image_name]
-# imgs = [Image.open(img_dirs[i] + name) for i,name in enumerate(img_names)]
-# imgs_torch = [prep(img) for img in imgs]
-# if torch.cuda.is_available():
-#     imgs_torch = [Variable(img.unsqueeze(0).cuda()) for img in imgs_torch]
-# else:
-#     imgs_torch = [Variable(img.unsqueeze(0)) for img in imgs_torch]
-# style_image, content_image = imgs_torch
-
-# # opt_img = Variable(torch.randn(content_image.size()).type_as(content_image.data), requires_grad=True) #random init
-# opt_img = Variable(content_image.data.clone(), requires_grad=True)
-
-# style_layers = ['r11','r21'] 
-
-# content_layers = ['r42']
-# loss_layers = style_layers + content_layers
-# loss_functions = [GramMSELoss()] * len(style_layers) + [nn.MSELoss()] * len(content_layers)
-# if torch.cuda.is_available():
-#     loss_functions = [loss_function.cuda() for loss_function in loss_functions]
-
-# #these are good weights settings:
-# style_weights = [1e3/n**2 for n in [64,128]]
-# content_weights = [1e0]
-# weights = style_weights + content_weights
-
-# #compute optimization targets
-# style_targets = [GramMatrix()(A).detach() for A in vgg(style_image, style_layers)]
-# content_targets = [A.detach() for A in vgg(content_image, content_layers)]
-# targets = style_targets + content_targets
-
-
-# #run style transfer
-# max_iter = 500
-# show_iter = 50
-# optimizer = optim.LBFGS([opt_img]);
-# n_iter=[0]
-
-# while n_iter[0] <= max_iter:
-
-#     def closure():
-#         optimizer.zero_grad()
-#         out = vgg(opt_img, loss_layers)
-#         layer_losses = [weights[a] * loss_functions[a](A, targets[a]) for a,A in enumerate(out)]
-#         loss = sum(layer_losses)
-#         loss.backward()
-#         n_iter[0]+=1
-#         #print loss
-#         if n_iter[0]%show_iter == (show_iter-1):
-#             print('Iteration: %d, loss: %f'%(n_iter[0]+1, loss.item()))
-# #             print([loss_layers[li] + ': ' +  str(l.data[0]) for li,l in enumerate(layer_losses)]) #loss of each layer
-#         return loss
-
-#     optimizer.step(closure)
-# out_image_name = '/content/Output_Image/'+'Vangogh_'+content_image_name
-# out_img1.save(out_image_name)
-
 def plot_images(axs, i, j, imgs, imgs_spongebob, imgs_monalisa, imgs_studio_ghibli, imgs_disney):
     axs[i, 0].imshow(imgs[j].resize(imgs_monalisa[j].size))
     axs[i, 1].imshow(imgs_monalisa[j])
@@ -314,6 +232,8 @@ def plot_images(axs, i, j, imgs, imgs_spongebob, imgs_monalisa, imgs_studio_ghib
 
 
 """Plotting the results"""
+
+
 def plot_results():
     image_names = ['MLK.jpg', 'sreac.jpg', 'towerhall.jpg', 'cityhall.jpg', 'Crystal.jpeg', 'Evening.jpeg',
                    'Buildings.jpg',
@@ -362,6 +282,7 @@ def conduct_second_experiment(opt_img, vgg, style_image, content_image):
 """ Now we run the third experiment. Let's now use 5 layers r11, r21, r31, r41 and r51 for extracting the style 
 and r42, r32 and r22 for extracting the content."""
 
+
 def conduct_third_experiment(opt_img, vgg, style_image, content_image):
     global style_layers, content_layers, style_weights, content_weights, out_img3
     style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
@@ -375,8 +296,6 @@ def conduct_third_experiment(opt_img, vgg, style_image, content_image):
     plt.gcf().set_size_inches(10, 10)
     plt.show()
     return out_img3
-
-
 
 
 """Lets compare the 3 results we obtained"""
@@ -396,8 +315,6 @@ def compare_results(imgs, out_img1, out_img2, out_img3):
     plt.show()
 
 
-
-
 if __name__ == '__main__':
     if len(sys.argv) != 3:
         print("Incorrect number of arguments")
@@ -407,8 +324,7 @@ if __name__ == '__main__':
     style_image_name = sys.argv[1]
     content_image_name = sys.argv[2]
 
-
-    if (not os.path.exists(image_path+style_image_name) or not os.path.exists(image_path+content_image_name)):
+    if (not os.path.exists(image_path + style_image_name) or not os.path.exists(image_path + content_image_name)):
         print("File does not exist")
         exit(1)
 
@@ -425,18 +341,21 @@ if __name__ == '__main__':
     out_img1 = conduct_first_experiment(opt_img, vgg, style_image, content_image)
     # saving the result
     print("saving the file")
-    out_image1_name = 'Output_Images/' + style_image_name.split('.')[0] + "_" + content_image_name.split('.')[0]+"_1.jpeg"
+    out_image1_name = 'Output_Images/' + style_image_name.split('.')[0] + "_" + content_image_name.split('.')[
+        0] + "_1.jpeg"
     out_img1.save(out_image1_name)
     print("file saved")
     print("Plotting results")
     imgs = plot_results()
     print("conducting the second experiment")
     out_img2 = conduct_second_experiment(opt_img, vgg, style_image, content_image)
-    out_image2_name = 'Output_Images/' + style_image_name.split('.')[0] + "_" + content_image_name.split('.')[0] + "_2.jpeg"
+    out_image2_name = 'Output_Images/' + style_image_name.split('.')[0] + "_" + content_image_name.split('.')[
+        0] + "_2.jpeg"
     out_img2.save(out_image2_name)
     print("conducting the third experiment")
     out_img3 = conduct_third_experiment(opt_img, vgg, style_image, content_image)
-    out_image3_name = 'Output_Images/' + style_image_name.split('.')[0] + "_" + content_image_name.split('.')[0] + "_3.jpeg"
+    out_image3_name = 'Output_Images/' + style_image_name.split('.')[0] + "_" + content_image_name.split('.')[
+        0] + "_3.jpeg"
     out_img3.save(out_image3_name)
-    compare_results(Image.open('Images/'+content_image_name), Image.open(out_image1_name), Image.open(out_image2_name), Image.open(out_image3_name))
-
+    compare_results(Image.open('Images/' + content_image_name), Image.open(out_image1_name),
+                    Image.open(out_image2_name), Image.open(out_image3_name))
